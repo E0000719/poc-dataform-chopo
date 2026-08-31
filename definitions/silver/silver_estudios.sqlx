@@ -1,0 +1,38 @@
+config {
+  type: "incremental",
+  uniqueKey: ["id_estudio"],
+  schema: "silver",
+  name: "estudios",
+  description: "Catálogo depurado y normalizado de estudios médicos.",
+  columns: utils.get_column_descriptions([
+    { from: "estudio_id",       to: "id_estudio" },
+    { from: "codigo_estudio",   to: "codigo_estudio" },
+    { from: "nombre_estudio",   to: "nombre_estudio" },
+    { from: "categoria",        to: "categoria" },
+    { from: "precio",           to: "precio" },
+    { from: "unidad_medida",    to: "unidad_medida" },
+    { from: "rango_referencia", to: "rango_referencia" }
+  ]),
+  tags: ["silver", "estudios"],
+  assertions: {
+    uniqueKey: ["id_estudio"],
+    nonNull: ["id_estudio"]
+  },
+  bigquery: {
+    clusterBy: ["categoria"]
+  }
+}
+
+${utils.render_silver(
+  ref("bronze", "estudios"),
+  "id_estudio",
+  [
+    { from: "estudio_id",       to: "id_estudio",        type: "int" },
+    { from: "codigo_estudio",   to: "codigo_estudio",    type: "string" },
+    { from: "nombre_estudio",   to: "nombre_estudio",    type: "string" },
+    { from: "categoria",        to: "categoria",         type: "string" },
+    { from: "precio",           to: "precio",            type: "numeric" },
+    { from: "unidad_medida",    to: "unidad_medida",     type: "string" },
+    { from: "rango_referencia", to: "rango_referencia",  type: "string" }
+  ]
+)}

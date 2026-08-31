@@ -1,0 +1,38 @@
+config {
+  type: "incremental",
+  uniqueKey: ["id_paciente"],
+  schema: "silver",
+  name: "pacientes",
+  description: "Tabla depurada de pacientes con datos personales normalizados.",
+  columns: utils.get_column_descriptions([
+    { from: "paciente_id",      to: "id_paciente" },
+    { from: "nombre",           to: "nombre" },
+    { from: "apellido",         to: "apellido" },
+    { from: "email",            to: "email" },
+    { from: "genero",           to: "genero" },
+    { from: "fecha_nacimiento", to: "fecha_nacimiento" },
+    { from: "fecha_registro",   to: "fecha_registro" }
+  ]),
+  tags: ["silver", "pacientes"],
+  assertions: {
+    uniqueKey: ["id_paciente"],
+    nonNull: ["id_paciente"]
+  },
+  bigquery: {
+    clusterBy: ["genero"]
+  }
+}
+
+${utils.render_silver(
+  ref("bronze", "pacientes"),
+  "id_paciente",
+  [
+    { from: "paciente_id",      to: "id_paciente",        type: "int" },
+    { from: "nombre",           to: "nombre",             type: "string" },
+    { from: "apellido",         to: "apellido",           type: "string" },
+    { from: "email",            to: "email",              type: "string" },
+    { from: "genero",           to: "genero",             type: "string" },
+    { from: "fecha_nacimiento", to: "fecha_nacimiento",   type: "date" },
+    { from: "fecha_registro",   to: "fecha_registro",     type: "timestamp" }
+  ]
+)}

@@ -1,0 +1,36 @@
+config {
+  type: "incremental",
+  uniqueKey: ["id_resultado"],
+  schema: "silver",
+  name: "resultados",
+  description: "Resultados cuantificables e individuales de estudios asociados a órdenes.",
+  columns: utils.get_column_descriptions([
+    { from: "resultado_id",     to: "id_resultado" },
+    { from: "orden_id",         to: "id_orden" },
+    { from: "estudio_id",       to: "id_estudio" },
+    { from: "valor_resultado",  to: "valor_resultado" },
+    { from: "fecha_resultado",  to: "fecha_resultado" }
+  ]),
+  tags: ["silver", "resultados"],
+  assertions: {
+    uniqueKey: ["id_resultado"],
+    nonNull: ["id_resultado", "id_orden", "id_estudio"]
+  },
+  bigquery: {
+    partitionBy: "DATE(fecha_resultado)",
+    clusterBy: ["id_orden", "id_estudio"]
+  }
+}
+
+${utils.render_silver(
+  ref("bronze", "resultados"),
+  "id_resultado",
+  [
+    { from: "resultado_id",    to: "id_resultado",    type: "int" },
+    { from: "orden_id",        to: "id_orden",        type: "int" },
+    { from: "estudio_id",      to: "id_estudio",      type: "int" },
+    { from: "valor_resultado", to: "valor_resultado", type: "numeric" },
+    { from: "fecha_resultado", to: "fecha_resultado", type: "timestamp" }
+  ],
+  "fecha_resultado DESC, id_resultado ASC"
+)}

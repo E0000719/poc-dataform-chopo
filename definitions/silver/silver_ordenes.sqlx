@@ -1,0 +1,36 @@
+config {
+  type: "incremental",
+  uniqueKey: ["id_orden"],
+  schema: "silver",
+  name: "ordenes",
+  description: "Información depurada y normalizada de órdenes de laboratorio.",
+  columns: utils.get_column_descriptions([
+    { from: "orden_id",         to: "id_orden" },
+    { from: "paciente_id",      to: "id_paciente" },
+    { from: "sucursal_id",      to: "id_sucursal" },
+    { from: "fecha_orden",      to: "fecha_orden" },
+    { from: "estatus",          to: "estado" }
+  ]),
+  tags: ["silver", "ordenes"],
+  assertions: {
+    uniqueKey: ["id_orden"],
+    nonNull: ["id_orden", "id_paciente", "id_sucursal"]
+  },
+  bigquery: {
+    partitionBy: "DATE(fecha_orden)",
+    clusterBy: ["id_paciente", "id_sucursal"]
+  }
+}
+
+${utils.render_silver(
+  ref("bronze", "ordenes"),
+  "id_orden",
+  [
+    { from: "orden_id",     to: "id_orden",     type: "int" },
+    { from: "paciente_id",  to: "id_paciente",  type: "int" },
+    { from: "sucursal_id",  to: "id_sucursal",  type: "int" },
+    { from: "fecha_orden",  to: "fecha_orden",  type: "timestamp" },
+    { from: "estatus",      to: "estatus",      type: "string" }
+  ],
+  "fecha_orden DESC, id_orden ASC"
+)}

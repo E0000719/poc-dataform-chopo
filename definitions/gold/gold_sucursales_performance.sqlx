@@ -1,0 +1,117 @@
+config {
+  type: "table",
+  schema: "gold",
+  name: "sucursales_performance",
+  description: "Dataset analítico para identificar sucursales críticas, comparar ventas, ticket promedio y clasificación de desempeño.",
+  columns: {
+    id_sucursal: "Identificador único de la sucursal",
+    nombre_sucursal: "Nombre comercial de la sucursal",
+    ciudad_sucursal: "Ciudad donde se ubica la sucursal",
+    estado_sucursal: "Estado geográfico donde se ubica la sucursal",
+    fecha_apertura: "Fecha oficial de apertura de la sucursal",
+    categoria_estudio: "Categoría médica a la que pertenecen los estudios de este agrupamiento",
+    total_ordenes: "Cantidad total de órdenes distintas atendidas en la sucursal y categoría",
+    total_pacientes_unicos: "Número total de pacientes únicos atendidos",
+    total_estudios_realizados: "Conteo total de exámenes o estudios médicos realizados",
+    ingresos_totales: "Monto acumulado total de ventas generadas en MXN",
+    ticket_promedio_orden: "Monto promedio gastado por cada orden registrada",
+    precio_promedio_estudio: "Costo o precio promedio por estudio realizado",
+    diagnostico_sucursal: "Clasificación del desempeño operativo (CRÍTICA por ticket bajo, CRÍTICA por bajo tráfico u ÓPTIMO)",
+    primera_orden_registrada: "Fecha y hora de la primera orden registrada",
+    ultima_orden_registrada: "Fecha y hora de la última orden registrada",
+    ts_dataform_process: "Marca de tiempo UTC indicando cuándo Dataform procesó el registro"
+  },
+  tags: ["gold", "analisis sucursales"],
+  assertions: {
+    uniqueKey: ["id_sucursal", "categoria_estudio"]
+  },
+  bigquery: {
+    clusterBy: ["estado_sucursal", "diagnostico_sucursal"]
+  }
+}
+
+WITH base_ordenes AS (
+
+    SELECT
+        o.id_orden,
+        o.id_sucursal,
+        o.id_paciente,
+        o.fecha_orden,
+        s.nombre AS nombre_sucursal,
+        s.ciudad AS ciudad_sucursal,
+        s.estado AS estado_sucursal,
+        s.fecha_apertura,
+        e.id_estudio,
+        e.categoria AS categoria_estudio,
+        e.precio AS precio_estudio
+
+    FROM ${ref("silver", "ordenes")} AS o
+    INNER JOIN ${ref("silver", "sucursales")} AS s
+        ON o.id_sucursal = s.id_sucursal
+    LEFT JOIN ${ref("silver", "resultados")} AS r
+        ON o.id_orden = r.id_orden
+    LEFT JOIN ${ref("silver", "estudios")} AS e
+        ON r.id_estudio = e.id_estudio
+
+),
+
+metricas_agregadas AS (
+
+    SELECT
+        id_sucursal,
+        nombre_sucursal,
+        ciudad_sucursal,
+        estado_sucursal,
+        fecha_apertura,
+        COALESCE(categoria_estudio, 'SIN CATEGORIA') AS categoria_estudio,
+
+        -- Métricas de Volumen y Ventas
+        COUNT(DISTINCT id_orden) AS total_ordenes,
+        COUNT(DISTINCT id_paciente) AS total_pacientes_unicos,
+        COUNT(id_estudio) AS total_estudios_realizados,
+        SUM(COALESCE(precio_estudio, 0)) AS ingresos_totales,
+
+        -- Ticket Promedio
+        SAFE_DIVIDE(SUM(COALESCE(precio_estudio, 0)), COUNT(DISTINCT id_orden)) AS ticket_promedio_orden,
+        AVG(COALESCE(precio_estudio, 0)) AS precio_promedio_estudio,
+
+        MIN(fecha_orden) AS primera_orden_registrada,
+        MAX(fecha_orden) AS ultima_orden_registrada
+
+    FROM base_ordenes
+    GROUP BY
+        id_sucursal,
+        nombre_sucursal,
+        ciudad_sucursal,
+        estado_sucursal,
+        fecha_apertura,
+        categoria_estudio
+
+)
+
+SELECT
+    id_sucursal,
+    nombre_sucursal,
+    ciudad_sucursal,
+    estado_sucursal,
+    fecha_apertura,
+    categoria_estudio,
+    total_ordenes,
+    total_pacientes_unicos,
+    total_estudios_realizados,
+    ingresos_totales,
+    ROUND(ticket_promedio_orden, 2) AS ticket_promedio_orden,
+    ROUND(precio_promedio_estudio, 2) AS precio_promedio_estudio,
+    
+    -- Lógica de Diagnóstico integrada en Gold
+    CASE 
+      WHEN ticket_promedio_orden < 300 THEN 'CRÍTICA: Ticket Promedio Bajo'
+      WHEN total_ordenes < 50 THEN 'CRÍTICA: Bajo Tráfico de Pacientes'
+      ELSE 'DESEMPEÑO OPTIMO'
+    END AS diagnostico_sucursal,
+
+    primera_orden_registrada,
+    ultima_orden_registrada,
+    CURRENT_TIMESTAMP() AS ts_dataform_process
+
+FROM metricas_agregadas

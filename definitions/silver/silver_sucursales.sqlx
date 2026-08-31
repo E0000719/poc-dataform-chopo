@@ -1,0 +1,34 @@
+config {
+  type: "incremental",
+  uniqueKey: ["id_sucursal"],
+  schema: "silver",
+  name: "sucursales",
+  description: "Catálogo depurado y normalizado de sucursales.",
+  columns: utils.get_column_descriptions([
+    { from: "sucursal_id",    to: "id_sucursal" },
+    { from: "nombre",         to: "nombre" },
+    { from: "ciudad",         to: "ciudad" },
+    { from: "estado",         to: "estado" },
+    { from: "fecha_apertura", to: "fecha_apertura" }
+  ]),
+  tags: ["silver", "sucursales"],
+  assertions: {
+    uniqueKey: ["id_sucursal"],
+    nonNull: ["id_sucursal"]
+  },
+  bigquery: {
+    clusterBy: ["estado", "ciudad"]
+  }
+}
+
+${utils.render_silver(
+  ref("bronze", "sucursales"),
+  "id_sucursal",
+  [
+    { from: "sucursal_id",    to: "id_sucursal",    type: "int" },
+    { from: "nombre",         to: "nombre",         type: "string" },
+    { from: "ciudad",         to: "ciudad",         type: "string" },
+    { from: "estado",         to: "estado",         type: "string" },
+    { from: "fecha_apertura", to: "fecha_apertura", type: "date" }
+  ]
+)}
