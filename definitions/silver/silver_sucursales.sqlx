@@ -4,11 +4,11 @@ config {
   schema: "silver",
   name: "sucursales",
   description: "Catálogo depurado y normalizado de sucursales.",
-  columns: utils.get_column_descriptions([
+  columns: dictionary.get_column_descriptions([
     { from: "sucursal_id",    to: "id_sucursal" },
-    { from: "nombre",         to: "nombre" },
+    { from: "nombre",         to: "nombre", description: "Nombre comercial de la sucursal de atención" },
     { from: "ciudad",         to: "ciudad" },
-    { from: "estado",         to: "estado" },
+    { from: "estado",         to: "estado", description: "Estado geográfico (entidad federativa) donde se ubica la sucursal" },
     { from: "fecha_apertura", to: "fecha_apertura" }
   ]),
   tags: ["silver", "sucursales"],
@@ -21,14 +21,26 @@ config {
   }
 }
 
-${utils.render_silver(
-  ref("bronze", "sucursales"),
-  "id_sucursal",
-  [
-    { from: "sucursal_id",    to: "id_sucursal",    type: "int" },
-    { from: "nombre",         to: "nombre",         type: "string" },
-    { from: "ciudad",         to: "ciudad",         type: "string" },
-    { from: "estado",         to: "estado",         type: "string" },
-    { from: "fecha_apertura", to: "fecha_apertura", type: "date" }
-  ]
-)}
+js {
+  const dq_fields = require("includes/quality.js");
+}
+
+WITH bronze AS (
+  SELECT *
+  FROM ${ref({ schema: "bronze", name: "sucursales" })}
+)
+
+SELECT
+  ${dq_fields.safeCast("sucursal_id", "INT64")} AS id_sucursal,
+
+  ${dq_fields.trimToNull("nombre")} AS nombre,
+
+  ${dq_fields.trimToNull("ciudad")} AS ciudad,
+
+  ${dq_fields.trimToNull("estado")} AS estado,
+
+  ${dq_fields.safeCastDate("fecha_apertura")} AS fecha_apertura
+
+FROM bronze
+
+QUALIFY ROW_NUMBER() OVER (PARTITION BY sucursal_id ORDER BY sucursal_id) = 1

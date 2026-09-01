@@ -4,9 +4,9 @@ config {
   schema: "silver",
   name: "pacientes",
   description: "Tabla depurada de pacientes con datos personales normalizados.",
-  columns: utils.get_column_descriptions([
+  columns: dictionary.get_column_descriptions([
     { from: "paciente_id",      to: "id_paciente" },
-    { from: "nombre",           to: "nombre" },
+    { from: "nombre",           to: "nombre", description: "Nombre(s) del paciente" },
     { from: "apellido",         to: "apellido" },
     { from: "email",            to: "email" },
     { from: "genero",           to: "genero" },
@@ -23,16 +23,36 @@ config {
   }
 }
 
-${utils.render_silver(
-  ref("bronze", "pacientes"),
-  "id_paciente",
-  [
-    { from: "paciente_id",      to: "id_paciente",        type: "int" },
-    { from: "nombre",           to: "nombre",             type: "string" },
-    { from: "apellido",         to: "apellido",           type: "string" },
-    { from: "email",            to: "email",              type: "string" },
-    { from: "genero",           to: "genero",             type: "string" },
-    { from: "fecha_nacimiento", to: "fecha_nacimiento",   type: "date" },
-    { from: "fecha_registro",   to: "fecha_registro",     type: "timestamp" }
-  ]
-)}
+js {
+  const dq_fields = require("includes/quality.js");
+}
+
+WITH bronze AS (
+  SELECT *
+  FROM ${ref({ schema: "bronze", name: "pacientes" })}
+
+  ${when(incremental(), `WHERE ${dq_fields.safeCastTimestamp("fecha_registro")} > (SELECT MAX(fecha_registro) FROM ${self()})`)}
+)
+
+SELECT
+  ${dq_fields.safeCast("paciente_id", "INT64")} AS id_paciente,
+
+  ${dq_fields.trimToNull("nombre")} AS nombre,
+
+  ${dq_fields.trimToNull("apellido")} AS apellido,
+
+  -- Email normalizado a minúsculas para comparaciones
+  ${dq_fields.lowerToNull("email")} AS email,
+
+  -- Género acotado a valores válidos 
+  CASE
+    WHEN ${dq_fields.trimUpperToNull("genero")} IN ('M', 'F') THEN ${dq_fields.trimUpperToNull("genero")}
+    ELSE NULL
+  END AS genero,
+
+  ${dq_fields.safeCastDate("fecha_nacimiento")} AS fecha_nacimiento,
+
+  ${dq_fields.safeCastTimestamp("fecha_registro")} AS fecha_registro
+
+FROM bronze
+QUALIFY ${dq_fields.keepLatestByKey(["paciente_id"], "fecha_registro")}

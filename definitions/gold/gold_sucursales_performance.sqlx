@@ -3,24 +3,24 @@ config {
   schema: "gold",
   name: "sucursales_performance",
   description: "Dataset analítico para identificar sucursales críticas, comparar ventas, ticket promedio y clasificación de desempeño.",
-  columns: {
-    id_sucursal: "Identificador único de la sucursal",
-    nombre_sucursal: "Nombre comercial de la sucursal",
-    ciudad_sucursal: "Ciudad donde se ubica la sucursal",
-    estado_sucursal: "Estado geográfico donde se ubica la sucursal",
-    fecha_apertura: "Fecha oficial de apertura de la sucursal",
-    categoria_estudio: "Categoría médica a la que pertenecen los estudios de este agrupamiento",
-    total_ordenes: "Cantidad total de órdenes distintas atendidas en la sucursal y categoría",
-    total_pacientes_unicos: "Número total de pacientes únicos atendidos",
-    total_estudios_realizados: "Conteo total de exámenes o estudios médicos realizados",
-    ingresos_totales: "Monto acumulado total de ventas generadas en MXN",
-    ticket_promedio_orden: "Monto promedio gastado por cada orden registrada",
-    precio_promedio_estudio: "Costo o precio promedio por estudio realizado",
-    diagnostico_sucursal: "Clasificación del desempeño operativo (CRÍTICA por ticket bajo, CRÍTICA por bajo tráfico u ÓPTIMO)",
-    primera_orden_registrada: "Fecha y hora de la primera orden registrada",
-    ultima_orden_registrada: "Fecha y hora de la última orden registrada",
-    ts_dataform_process: "Marca de tiempo UTC indicando cuándo Dataform procesó el registro"
-  },
+  columns: dictionary.get_column_descriptions([
+    "id_sucursal",
+    "nombre_sucursal",
+    { to: "ciudad_sucursal", description: "Ciudad donde se ubica la sucursal" },
+    { to: "estado_sucursal", description: "Estado geográfico (entidad federativa) donde se ubica la sucursal" },
+    "fecha_apertura",
+    { to: "categoria_estudio", description: "Categoría médica a la que pertenecen los estudios de este agrupamiento" },
+    { to: "total_ordenes", description: "Cantidad total de órdenes distintas atendidas en la sucursal y categoría" },
+    { to: "total_pacientes_unicos", description: "Número total de pacientes únicos atendidos" },
+    { to: "total_estudios_realizados", description: "Conteo total de exámenes o estudios médicos realizados" },
+    { to: "ingresos_totales", description: "Monto acumulado total de ventas generadas en MXN" },
+    { to: "ticket_promedio_orden", description: "Monto promedio gastado por cada orden registrada" },
+    { to: "precio_promedio_estudio", description: "Costo o precio promedio por estudio realizado" },
+    { to: "diagnostico_sucursal", description: "Clasificación del desempeño operativo (CRÍTICA por ticket bajo, CRÍTICA por bajo tráfico u ÓPTIMO)" },
+    { to: "primera_orden_registrada", description: "Fecha y hora de la primera orden registrada" },
+    { to: "ultima_orden_registrada", description: "Fecha y hora de la última orden registrada" },
+    "ts_dataform_process"
+  ]),
   tags: ["gold", "analisis sucursales"],
   assertions: {
     uniqueKey: ["id_sucursal", "categoria_estudio"]
@@ -30,7 +30,16 @@ config {
   }
 }
 
-WITH base_ordenes AS (
+WITH estudios_por_orden AS (
+
+    -- resultados vive a grano de analito: una orden+estudio puede tener varios resultados.
+    -- Se deduplica aquí a grano (id_orden, id_estudio) para no inflar las métricas de abajo.
+    SELECT DISTINCT id_orden, id_estudio
+    FROM ${ref("silver", "resultados")}
+
+),
+
+base_ordenes AS (
 
     SELECT
         o.id_orden,
@@ -48,7 +57,7 @@ WITH base_ordenes AS (
     FROM ${ref("silver", "ordenes")} AS o
     INNER JOIN ${ref("silver", "sucursales")} AS s
         ON o.id_sucursal = s.id_sucursal
-    LEFT JOIN ${ref("silver", "resultados")} AS r
+    LEFT JOIN estudios_por_orden AS r
         ON o.id_orden = r.id_orden
     LEFT JOIN ${ref("silver", "estudios")} AS e
         ON r.id_estudio = e.id_estudio
