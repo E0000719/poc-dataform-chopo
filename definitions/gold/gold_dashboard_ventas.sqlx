@@ -3,24 +3,24 @@ config {
   schema: "gold",
   name: "dashboard_ventas",
   description: "Dataset consolidado para tableros ejecutivos con detalle de ventas, volumen de estudios e ingresos por cliente.",
-  columns: {
-    id_orden: "Identificador único de la orden de laboratorio",
-    fecha_orden: "Fecha y hora en que se levantó la orden",
-    estatus_orden: "Estado operativo de la orden",
-    id_sucursal: "Identificador único de la sucursal de atención",
-    nombre_sucursal: "Nombre comercial de la sucursal",
-    ciudad_sucursal: "Ciudad donde se ubica la sucursal",
-    estado_sucursal: "Estado geográfico donde se ubica la sucursal",
-    id_paciente: "Identificador único del paciente",
-    genero_paciente: "Género biológico del paciente",
-    edad_paciente_al_ordenar: "Edad calculada del paciente al momento de crear la orden",
-    id_estudio: "Identificador único del estudio médico",
-    codigo_estudio: "Código clave del estudio",
-    nombre_estudio: "Nombre oficial del estudio médico",
-    categoria_estudio: "Categoría médica a la que pertenece el estudio",
-    ingreso_generado: "Monto total del estudio en pesos mexicanos (MXN)",
-    ts_dataform_process: "Marca de tiempo UTC indicando cuándo Dataform procesó el registro"
-  },
+  columns: dictionary.get_column_descriptions([
+    "id_orden",
+    "fecha_orden",
+    { to: "estatus_orden", description: "Estado operativo de la orden (ej. Completado, Pendiente, Cancelado)" },
+    "id_sucursal",
+    "nombre_sucursal",
+    { to: "ciudad_sucursal", description: "Ciudad donde se ubica la sucursal" },
+    { to: "estado_sucursal", description: "Estado geográfico (entidad federativa) donde se ubica la sucursal" },
+    "id_paciente",
+    { to: "genero_paciente", description: "Género biológico registrado del paciente" },
+    { to: "edad_paciente_al_ordenar", description: "Edad calculada del paciente al momento de crear la orden" },
+    "id_estudio",
+    "codigo_estudio",
+    "nombre_estudio",
+    { to: "categoria_estudio", description: "Categoría médica a la que pertenece el estudio (ej. Hematología, Química Clínica)" },
+    { to: "ingreso_generado", description: "Monto total del estudio en pesos mexicanos (MXN)" },
+    "ts_dataform_process"
+  ]),
   tags: ["gold", "dashboard"],
   assertions: {
     uniqueKey: ["id_orden", "id_estudio"]
@@ -31,12 +31,21 @@ config {
   }
 }
 
-WITH base AS (
+WITH estudios_por_orden AS (
+
+    -- resultados vive a grano de analito: una orden+estudio puede tener varios resultados.
+    -- Se deduplica aquí a grano (id_orden, id_estudio) para no inflar el join de abajo.
+    SELECT DISTINCT id_orden, id_estudio
+    FROM ${ref("silver", "resultados")}
+
+),
+
+base AS (
 
     SELECT
         o.id_orden,
         o.fecha_orden,
-        o.estatus AS estatus_orden,
+        o.estado AS estatus_orden,
 
         -- Dimensiones de Sucursal
         s.id_sucursal,
@@ -61,7 +70,7 @@ WITH base AS (
         ON o.id_sucursal = s.id_sucursal
     LEFT JOIN ${ref("silver", "pacientes")} AS p
         ON o.id_paciente = p.id_paciente
-    LEFT JOIN ${ref("silver", "resultados")} AS r
+    LEFT JOIN estudios_por_orden AS r
         ON o.id_orden = r.id_orden
     LEFT JOIN ${ref("silver", "estudios")} AS e
         ON r.id_estudio = e.id_estudio

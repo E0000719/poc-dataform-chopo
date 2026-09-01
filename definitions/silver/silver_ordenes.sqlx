@@ -4,12 +4,12 @@ config {
   schema: "silver",
   name: "ordenes",
   description: "Información depurada y normalizada de órdenes de laboratorio.",
-  columns: utils.get_column_descriptions([
+  columns: dictionary.get_column_descriptions([
     { from: "orden_id",         to: "id_orden" },
     { from: "paciente_id",      to: "id_paciente" },
     { from: "sucursal_id",      to: "id_sucursal" },
     { from: "fecha_orden",      to: "fecha_orden" },
-    { from: "estatus",          to: "estado" }
+    { from: "estatus",          to: "estado", description: "Estado operativo de la orden (ej. Completado, Pendiente, Cancelado)" }
   ]),
   tags: ["silver", "ordenes"],
   assertions: {
@@ -22,15 +22,29 @@ config {
   }
 }
 
-${utils.render_silver(
-  ref("bronze", "ordenes"),
-  "id_orden",
-  [
-    { from: "orden_id",     to: "id_orden",     type: "int" },
-    { from: "paciente_id",  to: "id_paciente",  type: "int" },
-    { from: "sucursal_id",  to: "id_sucursal",  type: "int" },
-    { from: "fecha_orden",  to: "fecha_orden",  type: "timestamp" },
-    { from: "estatus",      to: "estatus",      type: "string" }
-  ],
-  "fecha_orden DESC, id_orden ASC"
-)}
+js {
+  const dq_fields = require("includes/quality.js");
+}
+
+WITH bronze AS (
+  SELECT *
+  FROM ${ref({ schema: "bronze", name: "ordenes" })}
+
+  ${when(incremental(), `WHERE ${dq_fields.safeCastTimestamp("fecha_orden")} > (SELECT MAX(fecha_orden) FROM ${self()})`)}
+)
+
+SELECT
+  ${dq_fields.safeCast("orden_id", "INT64")} AS id_orden,
+
+  ${dq_fields.safeCast("paciente_id", "INT64")} AS id_paciente,
+
+  ${dq_fields.safeCast("sucursal_id", "INT64")} AS id_sucursal,
+
+  ${dq_fields.safeCastTimestamp("fecha_orden")} AS fecha_orden,
+
+  -- Estado del flujo operativo: normalizado a mayúsculas; default si llega vacío/corrupto.
+  ${dq_fields.defaultIfNull(dq_fields.trimUpperToNull("estatus"), "'DESCONOCIDO'")} AS estado
+
+FROM bronze
+-- Blindaje contra duplicados del mismo orden_id dentro del batch, quedándonos con la fila más reciente.
+QUALIFY ${dq_fields.keepLatestByKey(["orden_id"], "fecha_orden")}

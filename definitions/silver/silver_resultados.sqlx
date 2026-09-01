@@ -4,7 +4,7 @@ config {
   schema: "silver",
   name: "resultados",
   description: "Resultados cuantificables e individuales de estudios asociados a órdenes.",
-  columns: utils.get_column_descriptions([
+  columns: dictionary.get_column_descriptions([
     { from: "resultado_id",     to: "id_resultado" },
     { from: "orden_id",         to: "id_orden" },
     { from: "estudio_id",       to: "id_estudio" },
@@ -22,15 +22,29 @@ config {
   }
 }
 
-${utils.render_silver(
-  ref("bronze", "resultados"),
-  "id_resultado",
-  [
-    { from: "resultado_id",    to: "id_resultado",    type: "int" },
-    { from: "orden_id",        to: "id_orden",        type: "int" },
-    { from: "estudio_id",      to: "id_estudio",      type: "int" },
-    { from: "valor_resultado", to: "valor_resultado", type: "numeric" },
-    { from: "fecha_resultado", to: "fecha_resultado", type: "timestamp" }
-  ],
-  "fecha_resultado DESC, id_resultado ASC"
-)}
+js {
+  const dq_fields = require("includes/quality.js");
+}
+
+WITH bronze AS (
+  SELECT *
+  FROM ${ref({ schema: "bronze", name: "resultados" })}
+
+  ${when(incremental(), `WHERE ${dq_fields.safeCastTimestamp("fecha_resultado")} > (SELECT MAX(fecha_resultado) FROM ${self()})`)}
+)
+
+SELECT
+  ${dq_fields.safeCast("resultado_id", "INT64")} AS id_resultado,
+
+  ${dq_fields.safeCast("orden_id", "INT64")} AS id_orden,
+
+  ${dq_fields.safeCast("estudio_id", "INT64")} AS id_estudio,
+
+  -- Lectura de laboratorio: se conserva como texto (puede ser numérica, cualitativa o un rango),
+  -- solo se recorta espacios y se colapsa vacío a NULL.
+  ${dq_fields.trimToNull("valor_resultado")} AS valor_resultado,
+
+  ${dq_fields.safeCastTimestamp("fecha_resultado")} AS fecha_resultado
+
+FROM bronze
+QUALIFY ${dq_fields.keepLatestByKey(["resultado_id"], "fecha_resultado")}
