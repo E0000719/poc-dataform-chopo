@@ -43,7 +43,4 @@ SELECT
 
 FROM bronze
 
--- Al igual que estudios, sucursales es un catálogo sin columna de auditoría: se reprocesa
--- completo cada corrida (el upsert lo resuelve uniqueKey en config) y el QUALIFY solo
--- blinda contra duplicados accidentales de la llave.
 QUALIFY ROW_NUMBER() OVER (PARTITION BY sucursal_id ORDER BY sucursal_id) = 1

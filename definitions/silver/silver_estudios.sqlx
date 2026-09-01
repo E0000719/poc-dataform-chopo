@@ -52,7 +52,4 @@ SELECT
 
 FROM bronze
 
--- bronze.estudios es un catálogo sin columna de auditoría (sin "modificado"/updated_at),
--- por lo que se reprocesa completo en cada corrida y se apoya en uniqueKey (config) para el
--- upsert incremental. El QUALIFY solo blinda contra duplicados accidentales de la llave.
 QUALIFY ROW_NUMBER() OVER (PARTITION BY estudio_id ORDER BY estudio_id) = 1

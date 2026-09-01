@@ -31,8 +31,6 @@ WITH bronze AS (
   SELECT *
   FROM ${ref({ schema: "bronze", name: "pacientes" })}
 
-  -- fecha_registro es append-only (no hay columna de "modificado"), así que sirve como cursor
-  -- incremental solo para altas nuevas; ediciones tardías de un paciente ya cargado no se recapturan.
   ${when(incremental(), `WHERE ${dq_fields.safeCastTimestamp("fecha_registro")} > (SELECT MAX(fecha_registro) FROM ${self()})`)}
 )
 
@@ -43,10 +41,10 @@ SELECT
 
   ${dq_fields.trimToNull("apellido")} AS apellido,
 
-  -- Email normalizado a minúsculas para comparaciones/joins consistentes.
+  -- Email normalizado a minúsculas para comparaciones
   ${dq_fields.lowerToNull("email")} AS email,
 
-  -- Género acotado a valores válidos (M/F); cualquier otro valor cae a NULL en vez de ensuciar el dato.
+  -- Género acotado a valores válidos 
   CASE
     WHEN ${dq_fields.trimUpperToNull("genero")} IN ('M', 'F') THEN ${dq_fields.trimUpperToNull("genero")}
     ELSE NULL

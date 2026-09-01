@@ -40,8 +40,7 @@ SELECT
 
   ${dq_fields.safeCast("estudio_id", "INT64")} AS id_estudio,
 
-  -- Lectura de laboratorio: se conserva como texto (puede ser numérica, cualitativa o un rango),
-  -- solo se recorta espacios y se colapsa vacío a NULL.
+  -- se recorta espacios y se colapsa vacío a NULL.
   ${dq_fields.trimToNull("valor_resultado")} AS valor_resultado,
 
   ${dq_fields.safeCastTimestamp("fecha_resultado")} AS fecha_resultado

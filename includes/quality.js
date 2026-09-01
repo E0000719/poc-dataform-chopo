@@ -1,7 +1,6 @@
 /**
  * Data-quality helpers for the bronze -> silver .
- * Each function returns a SQL expression string to interpolate inside a
- * .sqlx SELECT list — no table/domain knowledge lives here.
+ * Each function returns a SQL expression
  */
 
 // STRING: trims whitespace, collapses empty string to NULL.
@@ -38,8 +37,7 @@ function defaultIfNull(expression, defaultExpr) {
   return `COALESCE(${expression}, ${defaultExpr})`;
 }
 
-// SQL predicate (goes inside QUALIFY) to keep the most recent row per key,
-// e.g. QUALIFY ${dq_fields.keepLatestByKey(['id_centro_financiero'], 'modificado')}
+// SQL predicate 
 function keepLatestByKey(partitionByColumns, orderByColumn) {
   const partitionBy = partitionByColumns.join(", ");
   return `ROW_NUMBER() OVER (PARTITION BY ${partitionBy} ORDER BY ${orderByColumn} DESC) = 1`;
