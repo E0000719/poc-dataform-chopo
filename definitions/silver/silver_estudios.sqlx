@@ -4,14 +4,15 @@ config {
   schema: "silver",
   name: "estudios",
   description: "Catálogo depurado y normalizado de estudios médicos.",
-  columns: utils.get_column_descriptions([
+  columns: dictionary.get_column_descriptions([
     { from: "estudio_id",       to: "id_estudio" },
     { from: "codigo_estudio",   to: "codigo_estudio" },
     { from: "nombre_estudio",   to: "nombre_estudio" },
     { from: "categoria",        to: "categoria" },
     { from: "precio",           to: "precio" },
     { from: "unidad_medida",    to: "unidad_medida" },
-    { from: "rango_referencia", to: "rango_referencia" }
+    { from: "rango_referencia", to: "rango_referencia" },
+    { to: "fecha_carga_silver", description: "Marca de tiempo UTC indicando cuándo Dataform cargó el registro en la capa silver" }
   ]),
   tags: ["silver", "estudios"],
   assertions: {
@@ -23,16 +24,35 @@ config {
   }
 }
 
-${utils.render_silver(
-  ref("bronze", "estudios"),
-  "id_estudio",
-  [
-    { from: "estudio_id",       to: "id_estudio",        type: "int" },
-    { from: "codigo_estudio",   to: "codigo_estudio",    type: "string" },
-    { from: "nombre_estudio",   to: "nombre_estudio",    type: "string" },
-    { from: "categoria",        to: "categoria",         type: "string" },
-    { from: "precio",           to: "precio",            type: "numeric" },
-    { from: "unidad_medida",    to: "unidad_medida",     type: "string" },
-    { from: "rango_referencia", to: "rango_referencia",  type: "string" }
-  ]
-)}
+js {
+  const dq_fields = require("includes/quality.js");
+}
+
+WITH bronze AS (
+  SELECT *
+  FROM ${ref({ schema: "bronze", name: "estudios" })}
+)
+
+SELECT
+  ${dq_fields.safeCast("estudio_id", "INT64")} AS id_estudio,
+
+  ${dq_fields.trimUpperToNull("codigo_estudio")} AS codigo_estudio,
+
+  ${dq_fields.trimToNull("nombre_estudio")} AS nombre_estudio,
+
+  ${dq_fields.trimUpperToNull("categoria")} AS categoria,
+
+  ${dq_fields.safeCast("precio", "NUMERIC")} AS precio,
+
+  ${dq_fields.trimUpperToNull("unidad_medida")} AS unidad_medida,
+
+  ${dq_fields.trimToNull("rango_referencia")} AS rango_referencia,
+
+  CURRENT_TIMESTAMP() AS fecha_carga_silver
+
+FROM bronze
+
+-- bronze.estudios es un catálogo sin columna de auditoría (sin "modificado"/updated_at),
+-- por lo que se reprocesa completo en cada corrida y se apoya en uniqueKey (config) para el
+-- upsert incremental. El QUALIFY solo blinda contra duplicados accidentales de la llave.
+QUALIFY ROW_NUMBER() OVER (PARTITION BY estudio_id ORDER BY estudio_id) = 1
